@@ -156,6 +156,23 @@ class _ShowScreenState extends State<ShowScreen> {
       ));
   }
 
+  Future<void> _confirmRemove(ResolvedCue c) async {
+    final running = _engine.running.any((r) => r.cue.id == c.id);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cue entfernen?'),
+        content: Text('${c.artist} – ${c.fileName} wird aus der Show entfernt. '
+            '${running ? 'Es spielt noch zu Ende. ' : ''}Die Datei bleibt im Archiv.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Abbrechen')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Entfernen')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) _remove(c.id);
+  }
+
   void _remove(int entryId) {
     final i = _ids.indexOf(entryId);
     if (i < 0) return; // already gone (e.g. double tap)
@@ -381,7 +398,7 @@ class _ShowScreenState extends State<ShowScreen> {
               IconButton(
                 tooltip: 'Entfernen',
                 icon: const Icon(Icons.remove_circle_outline),
-                onPressed: () => _remove(c.id),
+                onPressed: () => _confirmRemove(c),
               ),
               ReorderableDragStartListener(
                 index: i,

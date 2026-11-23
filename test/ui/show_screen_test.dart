@@ -48,6 +48,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   }
 
+  /// Confirms the "Cue entfernen?" dialog.
+  Future<void> confirmRemove(WidgetTester tester) async {
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Entfernen'));
+    await tester.pumpAndSettle();
+  }
+
   Finder nextRow() => find.ancestor(of: find.text('NÄCHSTER'), matching: find.byType(ListTile));
 
   // --- mode switch ---
@@ -250,6 +257,7 @@ void main() {
   testWidgets('remove entry saves show', (tester) async {
     await open(tester, ['Anna/Jonglage.mp3', 'Trio X/Intro.wav']);
     await tester.tap(find.byTooltip('Entfernen').first);
+    await confirmRemove(tester);
     await settle(tester);
     expect(await savedEntries(tester), ['Trio X/Intro.wav']);
   });
@@ -298,9 +306,9 @@ void main() {
   testWidgets('two quick removes delete exactly the tapped cues', (tester) async {
     await open(tester, files);
     await tester.tap(removeIn('Anna – Jonglage.mp3'));
-    await tester.pump();
+    await confirmRemove(tester);
     await tester.tap(removeIn('Ben – Handstand.wav'));
-    await tester.pump();
+    await confirmRemove(tester);
     expect(shownTitles(tester), ['Trio X – Intro.wav']);
     await settle(tester);
     expect(await savedEntries(tester), ['Trio X/Intro.wav']);
@@ -311,9 +319,9 @@ void main() {
     await tester.tap(find.text('Ben – Handstand.wav'));
     await tester.pump();
     await tester.tap(removeIn('Ben – Handstand.wav'));
-    await tester.pump();
+    await confirmRemove(tester);
     await tester.tap(removeIn('Trio X – Intro.wav'));
-    await tester.pump();
+    await confirmRemove(tester);
     // the entry that took Ben's place (the second Anna) is next
     expect(shownTitles(tester), ['Anna – Jonglage.mp3', 'Anna – Jonglage.mp3']);
     final rows = tester.widgetList<ListTile>(find.byType(ListTile)).where((t) => t.title is Text && (t.title as Text).data!.contains(' – ')).toList();
@@ -329,5 +337,30 @@ void main() {
     await tester.tap(find.byKey(const Key('editSwitch')));
     await tester.pumpAndSettle();
     expect(find.text('Archiv'), findsNothing);
+  });
+
+  testWidgets('remove asks for confirmation; cancel keeps the cue', (tester) async {
+    await open(tester, ['Anna/Jonglage.mp3', 'Trio X/Intro.wav']);
+    await tester.tap(removeIn('Anna – Jonglage.mp3'));
+    await tester.pumpAndSettle();
+    expect(find.text('Cue entfernen?'), findsOneWidget);
+    expect(find.textContaining('Anna – Jonglage.mp3 wird aus der Show entfernt'), findsOneWidget);
+    await tester.tap(find.text('Abbrechen'));
+    await tester.pumpAndSettle();
+    expect(shownTitles(tester), ['Anna – Jonglage.mp3', 'Trio X – Intro.wav']);
+    await settle(tester);
+    expect(await savedEntries(tester), ['Anna/Jonglage.mp3', 'Trio X/Intro.wav']);
+  });
+
+  testWidgets('removing a running cue says it keeps playing', (tester) async {
+    final backend = await open(tester, ['Anna/Jonglage.mp3', 'Trio X/Intro.wav']);
+    await go(tester);
+    await tester.tap(removeIn('Anna – Jonglage.mp3'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('spielt noch zu Ende'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Entfernen'));
+    await tester.pumpAndSettle();
+    expect(backend.voiceFor(abs('Anna/Jonglage.mp3')).stopped, isFalse);
+    expect(shownTitles(tester), ['Trio X – Intro.wav']);
   });
 }
