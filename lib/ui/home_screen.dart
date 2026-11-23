@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import 'settings_screen.dart';
 
-/// Route name for the show editor; argument is the show name.
-const showEditorRoute = '/show';
+/// Route name for the show view; argument is the show name.
+const showRoute = '/show';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -14,7 +14,7 @@ class HomeScreen extends StatelessWidget {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
 
   Future<void> _openShow(BuildContext context, String name) async {
-    await Navigator.of(context).pushNamed(showEditorRoute, arguments: name);
+    await Navigator.of(context).pushNamed(showRoute, arguments: name);
     if (context.mounted) await context.read<AppState>().rescan();
   }
 
