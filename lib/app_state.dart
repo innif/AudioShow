@@ -63,7 +63,35 @@ class AppState extends ChangeNotifier {
       library = await _scanner.scan(Directory(root));
       showNames = library.error == null ? await showStore!.listNames() : const [];
     }
+    lastUsed = library.error == null && showStore != null ? await showStore!.lastUsed() : const {};
+    _cueSettings.clear();
+    for (final a in library.artists) {
+      final map = await settingsForArtist(a.name);
+      for (final e in map.entries) {
+        _cueSettings[AudioFileRef(a.name, e.key).relPath] = e.value;
+      }
+    }
     notifyListeners();
+  }
+
+  final Map<String, CueSettings> _cueSettings = {};
+
+  /// Cached settings from the last scan (kept current by [saveCueSettings]).
+  CueSettings settingsOf(AudioFileRef ref) => _cueSettings[ref.relPath] ?? const CueSettings();
+
+  /// relPath -> date of the newest show using it; refreshed by [rescan].
+  Map<String, DateTime> lastUsed = const {};
+
+  Future<void> addArtistFolder(String name) async {
+    final n = importer.sanitizeArtistName(name);
+    await library.artistDir(n).create(recursive: true);
+    await rescan();
+  }
+
+  Future<List<AudioFileRef>> importFiles(String artist, List<File> files) async {
+    final refs = await importer.importFiles(library.root!, artist, files);
+    await rescan();
+    return refs;
   }
 
   Future<void> requestPermission() async {
@@ -107,6 +135,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> saveCueSettings(AudioFileRef ref, CueSettings s) async {
     await cueStore.save(library.artistDir(ref.artist), ref.fileName, s);
+    _cueSettings[ref.relPath] = s;
     notifyListeners();
   }
 
