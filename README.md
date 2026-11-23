@@ -19,8 +19,10 @@ Neue Dateien entweder per **Importieren** in der App (Datei wählen → Künstle
 ## Bedienung
 
 - **Start:** „Zugriff auf alle Dateien“ erlauben, in den Einstellungen den Cue-Ordner wählen (Vorschlag `/storage/emulated/0/Cues`).
-- **Neue Show:** legt die Show für heute an. Links Archiv mit Suche, rechts die Show (Reihenfolge per Griff ziehen). Antippen eines Eintrags → Cue-Einstellungen (werden in `cues.json` gespeichert und gelten künftig überall).
-- **Show starten:** GO startet den markierten nächsten Cue. Cue antippen = als nächsten markieren. Laufende Playbacks oben mit Suchleiste (ziehen zum Springen) und „Von Anfang“ (zweimal = auf 0:00).
+- **Neue Show:** legt die Show für heute an und öffnet sie. Es gibt nur **eine Ansicht** – oben rechts der Schalter **Bearbeiten**:
+  - **Bearbeiten an:** links das Archiv mit Suche (Hinzufügen per +), pro Cue Einstellungen (⚙), Entfernen und Ziehgriff zum Umsortieren. GO & Co. sind etwas kleiner, funktionieren aber weiter – die Show kann beim Bearbeiten laufen.
+  - **Bearbeiten aus:** nur Liste und große Knöpfe; Reihenfolge und Einstellungen sind gegen Fehlberührung gesperrt.
+- **Fahren (in beiden Modi):** GO startet den markierten nächsten Cue. Cue antippen = als nächsten markieren. Laufende Playbacks oben mit Suchleiste (ziehen zum Springen) und „Von Anfang“ (zweimal = auf 0:00). Umsortieren oder Hinzufügen während der Show unterbricht nichts; der markierte nächste Cue bleibt derselbe.
 - **GO-Verhalten** (Einstellungen): laufende Playbacks ausblenden (Standard 1 s), stoppen oder weiterlaufen lassen; pro Cue abweichend einstellbar („Bei nächstem GO“).
 
 ## Entwicklung
