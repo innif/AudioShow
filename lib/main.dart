@@ -5,6 +5,7 @@ import 'app_state.dart';
 import 'playback/just_audio_backend.dart';
 import 'playback/show_keepalive.dart';
 import 'ui/home_screen.dart';
+import 'ui/show_editor_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +36,11 @@ class AudioShowApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: const HomeScreen(),
-      onGenerateRoute: (settings) => null,
+      onGenerateRoute: (settings) => switch (settings.name) {
+        showEditorRoute => MaterialPageRoute(
+            settings: settings, builder: (_) => ShowEditorScreen(showName: settings.arguments as String)),
+        _ => null,
+      },
     );
   }
 }
