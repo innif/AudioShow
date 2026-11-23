@@ -44,7 +44,7 @@ Future<void> pumpApp(WidgetTester tester, AppState state, Widget child) async {
 
 /// Lets real file IO started by the widget finish, then rebuilds.
 Future<void> settle(WidgetTester tester) async {
-  for (var i = 0; i < 10; i++) {
+  for (var i = 0; i < 30; i++) {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     await tester.pump();
   }
