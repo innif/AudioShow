@@ -128,7 +128,7 @@ class _ShowModeScreenState extends State<ShowModeScreen> {
 
   Widget _cueList() {
     final cues = _engine.cues;
-    final runningIdx = _engine.running.map((r) => r.showIndex).toSet();
+    final runningIdx = {for (var i = 0; i < cues.length; i++) if (_engine.isRunning(i)) i};
     return ListView.builder(
       controller: _scroll,
       itemExtent: _tileHeight,
@@ -153,7 +153,7 @@ class _ShowModeScreenState extends State<ShowModeScreen> {
           );
         } else if (isRunning) {
           trailing = Text('läuft', style: TextStyle(color: scheme.primary, fontWeight: FontWeight.bold));
-        } else if (_engine.played.contains(i)) {
+        } else if (_engine.isPlayed(i)) {
           trailing = Icon(Icons.check, color: scheme.outline);
         }
         return ListTile(
@@ -252,7 +252,7 @@ class _RunningRow extends StatelessWidget {
             const SizedBox(width: 8),
             SizedBox(
               width: 260,
-              child: Text('${cue.showIndex + 1}  ${cue.cue.artist} – ${cue.cue.fileName}',
+              child: Text('${cue.cue.artist} – ${cue.cue.fileName}',
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18)),
             ),
             const SizedBox(width: 12),

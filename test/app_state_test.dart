@@ -62,4 +62,13 @@ void main() {
     expect(v.stopped, isTrue);
     expect(state.previewRef, isNull);
   });
+
+  testWidgets('resolve assigns given ids', (tester) async {
+    final root = makeCueRoot(['Anna/a.mp3']);
+    addTearDown(() => root.deleteSync(recursive: true));
+    final state = await makeState(tester, root: root.path);
+    final cues = (await tester.runAsync(
+        () => state.resolve(const Show(name: 's', entries: ['Anna/a.mp3', 'Anna/a.mp3']), ids: [7, 3])))!;
+    expect(cues.map((c) => c.id), [7, 3]);
+  });
 }

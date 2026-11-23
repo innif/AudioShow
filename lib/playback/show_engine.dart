@@ -10,11 +10,31 @@ import 'audio_backend.dart';
 /// A show entry with its file resolved and settings loaded from `cues.json`.
 @immutable
 class ResolvedCue {
+  /// Stable id of the show entry (survives reordering; differs for duplicates).
+  final int id;
   final String relPath;
   final String absPath;
   final CueSettings settings;
   final bool missing;
-  const ResolvedCue({required this.relPath, required this.absPath, required this.settings, this.missing = false});
+  const ResolvedCue({
+    this.id = 0,
+    required this.relPath,
+    required this.absPath,
+    required this.settings,
+    this.missing = false,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is ResolvedCue &&
+      other.id == id &&
+      other.relPath == relPath &&
+      other.absPath == absPath &&
+      other.settings == settings &&
+      other.missing == missing;
+
+  @override
+  int get hashCode => Object.hash(id, relPath, absPath, settings, missing);
 
   String get artist => relPath.split('/').first;
   String get fileName => relPath.substring(relPath.indexOf('/') + 1);
@@ -23,10 +43,9 @@ class ResolvedCue {
 /// One playing instance of a cue. The same cue can run more than once.
 class RunningCue {
   final int id;
-  final int showIndex;
   final ResolvedCue cue;
   final AudioVoice voice;
-  RunningCue._(this.id, this.showIndex, this.cue, this.voice);
+  RunningCue._(this.id, this.cue, this.voice);
 
   double _fadeFactor = 1;
   bool _fadingOut = false;
@@ -56,28 +75,60 @@ class ShowEngine extends ChangeNotifier {
   static const _restartWindow = Duration(seconds: 2);
 
   List<ResolvedCue> _cues = const [];
-  int? _next;
+  int? _nextEntry; // entry id of the next cue
   final List<RunningCue> _running = [];
   final List<_PendingStart> _pending = [];
   final Set<int> _played = {};
-  int _nextId = 1;
+  int _nextRunId = 1;
   bool _locked = false;
   Timer? _lockTimer;
-  int? _preloadIndex;
+  ResolvedCue? _preloadCue;
   Future<AudioVoice>? _preload;
   bool _disposed = false;
   String? lastError;
 
   List<ResolvedCue> get cues => _cues;
-  int? get nextIndex => _next;
+  int? get nextIndex {
+    final id = _nextEntry;
+    if (id == null) return null;
+    final i = _indexOfId(id);
+    return i < 0 ? null : i;
+  }
+
   List<RunningCue> get running => List.unmodifiable(_running);
+
+  /// Entry ids that have been started.
   Set<int> get played => Set.unmodifiable(_played);
+  bool isPlayed(int index) => _played.contains(_cues[index].id);
+  bool isRunning(int index) => _running.any((r) => r.cue.id == _cues[index].id);
+
+  int _indexOfId(int id) => _cues.indexWhere((c) => c.id == id);
 
   void setCues(List<ResolvedCue> cues) {
     _cues = List.unmodifiable(cues);
     _played.clear();
     _discardPreload();
     _setNext(_firstPlayable(0));
+    notifyListeners();
+  }
+
+  /// Replaces the list (reorder/add/remove/settings change) while keeping
+  /// running cues, played marks and the next cue (by entry id).
+  void updateCues(List<ResolvedCue> cues) {
+    final oldIds = {for (final c in _cues) c.id};
+    final oldNextIndex = nextIndex;
+    final oldNext = _nextEntry;
+    _cues = List.unmodifiable(cues);
+    _played.retainWhere((id) => _indexOfId(id) >= 0);
+    int? index;
+    if (oldNext != null) {
+      final i = _indexOfId(oldNext);
+      index = i >= 0 ? i : _firstPlayable(min(oldNextIndex ?? 0, _cues.length));
+    } else {
+      final i = _cues.indexWhere((c) => !oldIds.contains(c.id) && !c.missing);
+      index = i >= 0 ? i : null;
+    }
+    _setNext(index);
     notifyListeners();
   }
 
@@ -89,7 +140,7 @@ class ShowEngine extends ChangeNotifier {
 
   Future<void> go() async {
     if (_locked) return;
-    final index = _firstPlayable(_next);
+    final index = _firstPlayable(nextIndex);
     if (index == null) return;
     _locked = true;
     _lockTimer = Timer(goLockout, () => _locked = false);
@@ -111,7 +162,7 @@ class ShowEngine extends ChangeNotifier {
 
     final cue = _cues[index];
     final voiceFuture = _takePreload(index) ?? backend.load(cue.absPath, initialPosition: cue.settings.startAt);
-    _played.add(index);
+    _played.add(cue.id);
     _setNext(_firstPlayable(index + 1));
     lastError = null;
     notifyListeners();
@@ -133,7 +184,7 @@ class ShowEngine extends ChangeNotifier {
       unawaited(voice.dispose());
       return;
     }
-    final r = RunningCue._(_nextId++, index, cue, voice);
+    final r = RunningCue._(_nextRunId++, cue, voice);
     _running.add(r);
     // An end at or before the start would stop the cue instantly; ignore it.
     final endAt = cue.settings.endAt != null && cue.settings.endAt! > cue.settings.startAt ? cue.settings.endAt : null;
@@ -190,30 +241,30 @@ class ShowEngine extends ChangeNotifier {
   }
 
   void _setNext(int? index) {
-    _next = index;
+    _nextEntry = index == null || index >= _cues.length ? null : _cues[index].id;
     final target = _firstPlayable(index);
-    if (target == _preloadIndex) return;
+    final cue = target == null ? null : _cues[target];
+    if (cue != null && cue == _preloadCue) return;
     _discardPreload();
-    if (target != null) {
-      final cue = _cues[target];
-      _preloadIndex = target;
+    if (cue != null) {
+      _preloadCue = cue;
       _preload = backend.load(cue.absPath, initialPosition: cue.settings.startAt);
       _preload!.ignore();
     }
   }
 
   Future<AudioVoice>? _takePreload(int index) {
-    if (_preloadIndex != index) return null;
+    if (_preloadCue != _cues[index]) return null;
     final f = _preload;
     _preload = null;
-    _preloadIndex = null;
+    _preloadCue = null;
     return f;
   }
 
   void _discardPreload() {
     final f = _preload;
     _preload = null;
-    _preloadIndex = null;
+    _preloadCue = null;
     f?.then((v) => v.dispose(), onError: (_) {});
   }
 

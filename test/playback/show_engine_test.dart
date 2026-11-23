@@ -8,12 +8,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../fakes/fake_audio_backend.dart';
 
-ResolvedCue cue(String name, {CueSettings settings = const CueSettings(), bool missing = false}) =>
-    ResolvedCue(relPath: 'X/$name', absPath: '/root/X/$name', settings: settings, missing: missing);
+var _nextId = 0;
+
+/// Test cue; ids are assigned in creation order starting at 0 per test.
+ResolvedCue cue(String name, {CueSettings settings = const CueSettings(), bool missing = false, int? id}) =>
+    ResolvedCue(id: id ?? _nextId++, relPath: 'X/$name', absPath: '/root/X/$name', settings: settings, missing: missing);
 
 void main() {
   late FakeAudioBackend backend;
   late ShowEngine engine;
+
+  setUp(() => _nextId = 0);
 
   void setup(List<ResolvedCue> cues, {AppSettings? settings}) {
     backend = FakeAudioBackend();
@@ -43,7 +48,7 @@ void main() {
         expect(v.played, isTrue);
         expect(v.volume, closeTo(0.8, 1e-9));
         expect(engine.nextIndex, 1);
-        expect(engine.running.single.showIndex, 0);
+        expect(engine.running.single.cue.id, 0);
         expect(engine.played, {0});
       }));
 
@@ -69,7 +74,7 @@ void main() {
         final va = backend.voiceFor('/root/X/a.mp3');
         expect(va.stopped, isFalse);
         expect(va.volume, 1.0);
-        expect(engine.running.map((r) => r.showIndex), [0, 1]);
+        expect(engine.running.map((r) => r.cue.id), [0, 1]);
       }));
 
   test('go with global fadeOut fades running cue over goFade then stops it', () => run((a) {
@@ -82,14 +87,14 @@ void main() {
         a.elapse(const Duration(milliseconds: 500));
         expect(va.stopped, isFalse);
         expect(va.volume, lessThan(1.0));
-        expect(engine.running.firstWhere((r) => r.showIndex == 0).fadingOut, isTrue);
+        expect(engine.running.firstWhere((r) => r.cue.id == 0).fadingOut, isTrue);
         a.elapse(const Duration(milliseconds: 600));
         expect(va.stopped, isTrue);
         final fadeVolumes = va.volumes.skip(1).toList();
         for (var i = 1; i < fadeVolumes.length; i++) {
           expect(fadeVolumes[i], lessThanOrEqualTo(fadeVolumes[i - 1]));
         }
-        expect(engine.running.map((r) => r.showIndex), [1]);
+        expect(engine.running.map((r) => r.cue.id), [1]);
       }));
 
   test("go uses running cue's goFade override", () => run((a) {
@@ -112,7 +117,7 @@ void main() {
         engine.go();
         a.flushMicrotasks();
         expect(backend.voiceFor('/root/X/a.mp3').stopped, isTrue);
-        expect(engine.running.map((r) => r.showIndex), [1]);
+        expect(engine.running.map((r) => r.cue.id), [1]);
       }));
 
   test('second go within 500ms is ignored', () => run((a) {
@@ -165,7 +170,7 @@ void main() {
         expect(engine.nextIndex, 2);
         expect(engine.running, isEmpty);
         goAndSettle(a);
-        expect(engine.running.single.showIndex, 2);
+        expect(engine.running.single.cue.id, 2);
         expect(engine.nextIndex, isNull);
       }));
 
@@ -329,7 +334,7 @@ void main() {
         a.flushMicrotasks();
         expect(backend.voiceFor('/root/X/a.mp3').played, isFalse);
         expect(backend.voiceFor('/root/X/b.mp3').played, isTrue);
-        expect(engine.running.map((r) => r.showIndex), [1]);
+        expect(engine.running.map((r) => r.cue.id), [1]);
       }));
 
   test('endAt at or before startAt is ignored', () => run((a) {
@@ -341,5 +346,100 @@ void main() {
         a.flushMicrotasks();
         expect(v.stopped, isFalse);
         expect(engine.running, hasLength(1));
+      }));
+
+  test('updateCues keeps next cue when reordered', () => run((a) {
+        final ca = cue('a.mp3'), cb = cue('b.mp3'), cc = cue('c.mp3');
+        setup([ca, cb, cc]);
+        engine.select(1);
+        a.flushMicrotasks();
+        engine.updateCues([cb, ca, cc]);
+        a.flushMicrotasks();
+        expect(engine.nextIndex, 0);
+        goAndSettle(a);
+        expect(engine.running.single.cue.id, cb.id);
+        expect(backend.voiceFor('/root/X/b.mp3').played, isTrue);
+      }));
+
+  test('updateCues keeps preload when next cue unchanged', () => run((a) {
+        final ca = cue('a.mp3'), cb = cue('b.mp3');
+        setup([ca, cb]);
+        a.flushMicrotasks();
+        final loads = backend.voices.length;
+        engine.updateCues([cb, ca]);
+        a.flushMicrotasks();
+        expect(backend.voices.length, loads);
+        expect(engine.nextIndex, 1);
+      }));
+
+  test('updateCues reloads preload when next cue settings change', () => run((a) {
+        final ca = cue('a.mp3');
+        setup([ca]);
+        a.flushMicrotasks();
+        final old = backend.voiceFor('/root/X/a.mp3');
+        engine.updateCues([
+          ResolvedCue(id: ca.id, relPath: ca.relPath, absPath: ca.absPath,
+              settings: const CueSettings(startAt: Duration(seconds: 10))),
+        ]);
+        a.flushMicrotasks();
+        expect(old.disposed, isTrue);
+        expect(backend.voices.length, 2);
+        goAndSettle(a);
+        expect(engine.running.single.voice.position, const Duration(seconds: 10));
+      }));
+
+  test('removing next cue makes the entry at its position next', () => run((a) {
+        final ca = cue('a.mp3'), cb = cue('b.mp3'), cc = cue('c.mp3');
+        setup([ca, cb, cc]);
+        engine.select(1);
+        engine.updateCues([ca, cc]);
+        a.flushMicrotasks();
+        expect(engine.nextIndex, 1);
+        goAndSettle(a);
+        expect(engine.running.single.cue.id, cc.id);
+      }));
+
+  test('appending after end of show makes new entry next', () => run((a) {
+        final ca = cue('a.mp3');
+        setup([ca]);
+        a.flushMicrotasks();
+        goAndSettle(a);
+        expect(engine.nextIndex, isNull);
+        engine.updateCues([ca, cue('d.mp3')]);
+        a.flushMicrotasks();
+        expect(engine.nextIndex, 1);
+      }));
+
+  test('appending while a next cue exists keeps it', () => run((a) {
+        final ca = cue('a.mp3'), cb = cue('b.mp3');
+        setup([ca, cb]);
+        a.flushMicrotasks();
+        engine.updateCues([ca, cb, cue('d.mp3')]);
+        expect(engine.nextIndex, 0);
+      }));
+
+  test('removing a running cue keeps it playing', () => run((a) {
+        final ca = cue('a.mp3'), cb = cue('b.mp3');
+        setup([ca, cb]);
+        a.flushMicrotasks();
+        goAndSettle(a);
+        engine.updateCues([cb]);
+        a.flushMicrotasks();
+        expect(engine.running.single.cue.id, ca.id);
+        expect(backend.voiceFor('/root/X/a.mp3').stopped, isFalse);
+        expect(engine.nextIndex, 0);
+      }));
+
+  test('duplicate file entries are tracked by id', () => run((a) {
+        final a0 = cue('a.mp3'), a1 = cue('a.mp3');
+        setup([a0, a1]);
+        a.flushMicrotasks();
+        goAndSettle(a);
+        expect(engine.played, {a0.id});
+        engine.updateCues([a1, a0]);
+        a.flushMicrotasks();
+        expect(engine.nextIndex, 0);
+        expect(engine.isPlayed(1), isTrue);
+        expect(engine.isPlayed(0), isFalse);
       }));
 }

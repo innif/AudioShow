@@ -204,14 +204,16 @@ class AppState extends ChangeNotifier {
   }
 
   /// Resolves show entries to files and their current settings.
-  Future<List<ResolvedCue>> resolve(Show show) async {
+  Future<List<ResolvedCue>> resolve(Show show, {List<int>? ids}) async {
     final byArtist = <String, Map<String, CueSettings>>{};
     final result = <ResolvedCue>[];
-    for (final rel in show.entries) {
+    for (var i = 0; i < show.entries.length; i++) {
+      final rel = show.entries[i];
       final ref = AudioFileRef.parse(rel);
       final file = library.fileFor(ref);
       final settings = byArtist[ref.artist] ??= await settingsForArtist(ref.artist);
       result.add(ResolvedCue(
+        id: ids != null ? ids[i] : i,
         relPath: rel,
         absPath: file.path,
         settings: settings[ref.fileName] ?? const CueSettings(),
