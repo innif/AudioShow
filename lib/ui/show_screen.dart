@@ -83,35 +83,70 @@ class _ShowScreenState extends State<ShowScreen> {
     }
   }
 
-  /// Re-resolves the current list and hands it to the engine (keeps playback).
+  bool _resyncing = false;
+  bool _resyncAgain = false;
+
+  /// Re-reads files/settings for the current list (after settings or library
+  /// changes) and hands it to the engine. Never interrupts playback.
   Future<void> _resync() async {
-    final show = _show;
-    if (show == null) return;
-    final version = ++_version;
-    final cues = await _state.resolve(show, ids: _ids);
-    if (!mounted || version != _version) return;
-    _engine.updateCues(cues);
+    if (_show == null) return;
+    if (_resyncing) {
+      _resyncAgain = true;
+      return;
+    }
+    _resyncing = true;
+    try {
+      do {
+        _resyncAgain = false;
+        final version = _version;
+        final cues = await _state.resolve(_show!, ids: _ids);
+        if (!mounted) return;
+        if (version != _version) {
+          _resyncAgain = true; // list was edited meanwhile: resolve the new one
+          continue;
+        }
+        _engine.updateCues(cues);
+      } while (_resyncAgain && mounted);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cue-Ordner nicht lesbar: $e')));
+      }
+    } finally {
+      _resyncing = false;
+    }
   }
 
   void _onAppState() => _resync();
 
-  Future<void> _apply(List<String> entries, List<int> ids) async {
+  /// Applies an edit synchronously (list + engine), then saves in the background.
+  void _apply(List<String> entries, List<int> ids, List<ResolvedCue> cues) {
+    _version++;
     setState(() {
       _show = _show!.copyWith(entries: entries);
       _ids = ids;
     });
+    _engine.updateCues(cues);
+    unawaited(_save(_show!));
+  }
+
+  Future<void> _save(Show show) async {
     try {
-      await _state.showStore!.save(_show!);
+      await _state.showStore!.save(show);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speichern fehlgeschlagen: $e')));
       }
     }
-    await _resync();
   }
 
   void _add(AudioFileRef ref) {
-    _apply([..._show!.entries, ref.relPath], [..._ids, _nextEntryId++]);
+    final cue = ResolvedCue(
+      id: _nextEntryId++,
+      relPath: ref.relPath,
+      absPath: _state.library.fileFor(ref).path,
+      settings: _state.settingsOf(ref),
+    );
+    _apply([..._show!.entries, ref.relPath], [..._ids, cue.id], [..._engine.cues, cue]);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(
@@ -120,13 +155,19 @@ class _ShowScreenState extends State<ShowScreen> {
       ));
   }
 
-  void _remove(int i) => _apply([..._show!.entries]..removeAt(i), [..._ids]..removeAt(i));
+  void _remove(int entryId) {
+    final i = _ids.indexOf(entryId);
+    if (i < 0) return; // already gone (e.g. double tap)
+    _apply([..._show!.entries]..removeAt(i), [..._ids]..removeAt(i),
+        _engine.cues.where((c) => c.id != entryId).toList());
+  }
 
   void _reorder(int from, int to) {
-    final e = [..._show!.entries], ids = [..._ids];
+    final e = [..._show!.entries], ids = [..._ids], cues = [..._engine.cues];
     e.insert(to, e.removeAt(from));
     ids.insert(to, ids.removeAt(from));
-    _apply(e, ids);
+    cues.insert(to, cues.removeAt(from));
+    _apply(e, ids, cues);
   }
 
   Future<void> _editSettings(int i) async {
@@ -207,6 +248,14 @@ class _ShowScreenState extends State<ShowScreen> {
           toolbarHeight: 52,
           title: Text('Show ${widget.showName}'),
           actions: [
+            if (_edit && MediaQuery.sizeOf(context).width < 900) ...[
+              FilledButton.tonalIcon(
+                icon: const Icon(Icons.library_music),
+                label: const Text('Archiv'),
+                onPressed: _openArchiveSheet,
+              ),
+              const SizedBox(width: 16),
+            ],
             const Text('Bearbeiten'),
             const SizedBox(width: 8),
             Switch(key: const Key('editSwitch'), value: _edit, onChanged: _setEdit),
@@ -220,20 +269,7 @@ class _ShowScreenState extends State<ShowScreen> {
                 : LayoutBuilder(builder: (context, c) {
                     final showPane = ListenableBuilder(listenable: _engine, builder: (context, _) => _showPane());
                     if (!_edit) return showPane;
-                    if (c.maxWidth < 900) {
-                      return Stack(children: [
-                        showPane,
-                        Positioned(
-                          right: 16,
-                          top: 8,
-                          child: FilledButton.tonalIcon(
-                            icon: const Icon(Icons.library_music),
-                            label: const Text('Archiv'),
-                            onPressed: _openArchiveSheet,
-                          ),
-                        ),
-                      ]);
-                    }
+                    if (c.maxWidth < 900) return showPane;
                     return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       Expanded(flex: 2, child: LibraryPane(onAdd: _add)),
                       const VerticalDivider(width: 1),
@@ -344,7 +380,7 @@ class _ShowScreenState extends State<ShowScreen> {
               IconButton(
                 tooltip: 'Entfernen',
                 icon: const Icon(Icons.remove_circle_outline),
-                onPressed: () => _remove(i),
+                onPressed: () => _remove(c.id),
               ),
               ReorderableDragStartListener(
                 index: i,

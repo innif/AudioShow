@@ -267,4 +267,67 @@ void main() {
         settings: {'Anna/Jonglage.mp3': const CueSettings(startAt: Duration(seconds: 12))});
     expect(find.textContaining('ab 0:12'), findsWidgets);
   });
+
+  // --- review fixes: list updates immediately, no stale indices ---
+
+  Finder removeIn(String title) => find.descendant(
+      of: find.ancestor(of: find.text(title), matching: find.byType(ListTile)).first,
+      matching: find.byTooltip('Entfernen'));
+
+  List<String> shownTitles(WidgetTester tester) => tester
+      .widgetList<ListTile>(find.byType(ListTile))
+      .map((t) => t.title)
+      .whereType<Text>()
+      .map((t) => t.data ?? '')
+      .where((t) => t.contains(' – '))
+      .toList();
+
+  testWidgets('reorder shows the new order immediately (no jump back)', (tester) async {
+    await open(tester, files, edit: true);
+    final g = await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('handle-0'))));
+    await tester.pump(const Duration(milliseconds: 100));
+    for (var i = 0; i < 20; i++) {
+      await g.moveBy(const Offset(0, 15));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await g.up();
+    await tester.pumpAndSettle(); // no real IO has run yet
+    expect(shownTitles(tester).first, 'Trio X – Intro.wav');
+  });
+
+  testWidgets('two quick removes delete exactly the tapped cues', (tester) async {
+    await open(tester, files);
+    await tester.tap(removeIn('Anna – Jonglage.mp3'));
+    await tester.pump();
+    await tester.tap(removeIn('Ben – Handstand.wav'));
+    await tester.pump();
+    expect(shownTitles(tester), ['Trio X – Intro.wav']);
+    await settle(tester);
+    expect(await savedEntries(tester), ['Trio X/Intro.wav']);
+  });
+
+  testWidgets('removing next cue then another quickly keeps "same position" rule', (tester) async {
+    await open(tester, ['Anna/Jonglage.mp3', 'Trio X/Intro.wav', 'Ben/Handstand.wav', 'Anna/Jonglage.mp3']);
+    await tester.tap(find.text('Ben – Handstand.wav'));
+    await tester.pump();
+    await tester.tap(removeIn('Ben – Handstand.wav'));
+    await tester.pump();
+    await tester.tap(removeIn('Trio X – Intro.wav'));
+    await tester.pump();
+    // the entry that took Ben's place (the second Anna) is next
+    expect(shownTitles(tester), ['Anna – Jonglage.mp3', 'Anna – Jonglage.mp3']);
+    final rows = tester.widgetList<ListTile>(find.byType(ListTile)).where((t) => t.title is Text && (t.title as Text).data!.contains(' – ')).toList();
+    expect(rows[1].selected, isTrue);
+    expect(rows[0].selected, isFalse);
+  });
+
+  testWidgets('narrow layout: Archiv button sits in the app bar', (tester) async {
+    await open(tester, files);
+    tester.view.physicalSize = const Size(800, 1200);
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: find.byType(AppBar), matching: find.text('Archiv')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('editSwitch')));
+    await tester.pumpAndSettle();
+    expect(find.text('Archiv'), findsNothing);
+  });
 }
