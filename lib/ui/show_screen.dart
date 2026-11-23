@@ -50,6 +50,7 @@ class _ShowScreenState extends State<ShowScreen> {
     _engine.addListener(_onEngine);
     _state.addListener(_onAppState);
     _load();
+    unawaited(_state.rememberShow(widget.showName));
     if (widget.keepAwake) unawaited(ShowKeepAlive.enter(widget.showName));
   }
 

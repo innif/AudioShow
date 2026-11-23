@@ -21,6 +21,12 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final autoOpen = state.takeAutoOpenShow();
+    if (autoOpen != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) _openShow(context, autoOpen);
+      });
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('AudioShow'),

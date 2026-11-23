@@ -131,6 +131,23 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Remembers [name] as the show to reopen on the next app start (no notify).
+  Future<void> rememberShow(String name) async {
+    if (settings.lastShow == name) return;
+    settings = settings.copyWith(lastShow: name);
+    await _settingsStore.save(settings);
+  }
+
+  bool _autoOpenDone = false;
+
+  /// The last show to reopen once after start, if it still exists.
+  String? takeAutoOpenShow() {
+    if (_autoOpenDone || !ready) return null;
+    _autoOpenDone = true;
+    final name = settings.lastShow;
+    return name != null && showNames.contains(name) ? name : null;
+  }
+
   Future<Show> createShowToday() async {
     final show = await showStore!.createForDate(DateTime.now());
     await rescan();

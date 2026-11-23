@@ -31,4 +31,12 @@ void main() {
     expect(s.fadeShort, const Duration(seconds: 2));
     expect(s.fadeLong, const Duration(seconds: 8));
   });
+
+  test('lastShow roundtrip', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = AppSettingsStore();
+    expect((await store.load()).lastShow, isNull);
+    await store.save(const AppSettings(lastShow: '2026-11-23'));
+    expect((await store.load()).lastShow, '2026-11-23');
+  });
 }
