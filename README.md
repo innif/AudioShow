@@ -116,10 +116,12 @@ git clone https://github.com/innif/AudioShow.git
 cd AudioShow
 flutter pub get
 
-# auf das angeschlossene Tablet installieren
+# auf das angeschlossene Tablet installieren bzw. aktualisieren
 flutter build apk --release
-flutter install --release
+adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
+
+> **Hinweis:** Nicht `flutter install` zum Aktualisieren verwenden – es deinstalliert die App vorher. Dabei gehen die Berechtigung „Zugriff auf alle Dateien“ und die App-Einstellungen (Cue-Ordner, GO-Verhalten, zuletzt geöffnete Show) verloren. `adb install -r` aktualisiert und behält beides. Playbacks, `cues.json` und Shows liegen im Cue-Ordner und bleiben in jedem Fall erhalten.
 
 ## Entwicklung
 
