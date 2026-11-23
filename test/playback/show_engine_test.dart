@@ -442,4 +442,23 @@ void main() {
         expect(engine.isPlayed(1), isTrue);
         expect(engine.isPlayed(0), isFalse);
       }));
+
+  test('skip jumps relative and clamps to 0 and duration', () => run((a) {
+        setup([cue('a.mp3')]);
+        a.flushMicrotasks();
+        goAndSettle(a);
+        final r = engine.running.single;
+        final v = backend.voiceFor('/root/X/a.mp3'); // duration 3:00
+        v.emitPosition(const Duration(seconds: 30));
+        engine.skip(r, const Duration(seconds: 10));
+        a.flushMicrotasks();
+        expect(v.seeks.last, const Duration(seconds: 40));
+        engine.skip(r, const Duration(seconds: -50));
+        a.flushMicrotasks();
+        expect(v.seeks.last, Duration.zero);
+        v.emitPosition(const Duration(minutes: 2, seconds: 55));
+        engine.skip(r, const Duration(seconds: 10));
+        a.flushMicrotasks();
+        expect(v.seeks.last, const Duration(minutes: 3));
+      }));
 }

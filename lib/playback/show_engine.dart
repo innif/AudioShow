@@ -230,6 +230,15 @@ class ShowEngine extends ChangeNotifier {
 
   Future<void> seek(RunningCue r, Duration absolutePosition) => r.voice.seek(absolutePosition);
 
+  /// Jumps by [delta] (e.g. ±10 s), clamped to the start and end of the file.
+  Future<void> skip(RunningCue r, Duration delta) {
+    var target = r.position + delta;
+    if (target < Duration.zero) target = Duration.zero;
+    final dur = r.duration;
+    if (dur != null && target > dur) target = dur;
+    return r.voice.seek(target);
+  }
+
   // --- internals ---
 
   int? _firstPlayable(int? from) {

@@ -363,4 +363,26 @@ void main() {
     expect(backend.voiceFor(abs('Anna/Jonglage.mp3')).stopped, isFalse);
     expect(shownTitles(tester), ['Trio X – Intro.wav']);
   });
+
+  testWidgets('seek bar spans the full width of the show pane', (tester) async {
+    await open(tester, files, edit: false);
+    await go(tester);
+    final bar = tester.getSize(find.byKey(const ValueKey('seekbar'))).width;
+    final row = tester.getSize(find.byKey(const ValueKey('running-row'))).width;
+    expect(bar, greaterThan(row * 0.9));
+  });
+
+  testWidgets('+10 s and -10 s buttons jump in the running cue', (tester) async {
+    final backend = await open(tester, files, edit: false);
+    await go(tester);
+    final v = backend.voiceFor(abs('Anna/Jonglage.mp3'));
+    v.emitPosition(const Duration(seconds: 30));
+    await tester.pump();
+    await tester.tap(find.byTooltip('10 s vor'));
+    await tester.pump();
+    expect(v.seeks.last, const Duration(seconds: 40));
+    await tester.tap(find.byTooltip('10 s zurück'));
+    await tester.pump();
+    expect(v.seeks.last, const Duration(seconds: 30));
+  });
 }

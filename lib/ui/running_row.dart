@@ -14,50 +14,69 @@ class RunningRow extends StatelessWidget {
     return Container(
       key: const ValueKey('running-row'),
       color: scheme.primaryContainer.withValues(alpha: cue.fadingOut ? 0.15 : 0.35),
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
       child: StreamBuilder<Duration>(
         stream: cue.voice.positionStream,
         initialData: cue.position,
         builder: (context, snap) {
           final pos = snap.data ?? Duration.zero;
           final dur = cue.duration;
-          return Row(children: [
-            Icon(cue.fadingOut ? Icons.trending_down : Icons.play_arrow),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 260,
-              child: Text('${cue.cue.artist} – ${cue.cue.fileName}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SeekBar(
-                key: const ValueKey('seekbar'),
-                position: pos,
-                duration: dur,
-                onSeek: (d) => engine.seek(cue, d),
+          const time = TextStyle(fontSize: 16, fontFeatures: [FontFeature.tabularFigures()]);
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Icon(cue.fadingOut ? Icons.trending_down : Icons.play_arrow),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('${cue.cue.artist} – ${cue.cue.fileName}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18)),
               ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 150,
-              child: Text(
-                dur == null ? formatTime(pos) : '${formatTime(pos)} / ${formatTime(dur)}\n−${formatTime(dur - pos)}',
-                textAlign: TextAlign.right,
-                style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+              Text(dur == null ? formatTime(pos) : '${formatTime(pos)} / ${formatTime(dur)}', style: time),
+              if (dur != null) ...[
+                const SizedBox(width: 12),
+                Text('−${formatTime(dur - pos)}', style: time.copyWith(fontWeight: FontWeight.bold)),
+              ],
+              const SizedBox(width: 12),
+              _JumpButton(label: '−10 s', tooltip: '10 s zurück', onPressed: () => engine.skip(cue, const Duration(seconds: -10))),
+              const SizedBox(width: 6),
+              _JumpButton(label: '+10 s', tooltip: '10 s vor', onPressed: () => engine.skip(cue, const Duration(seconds: 10))),
+              IconButton(
+                tooltip: 'Von Anfang',
+                iconSize: 30,
+                icon: const Icon(Icons.replay),
+                onPressed: () => engine.restart(cue),
               ),
-            ),
-            IconButton(
-              tooltip: 'Von Anfang',
-              iconSize: 32,
-              icon: const Icon(Icons.replay),
-              onPressed: () => engine.restart(cue),
+            ]),
+            SeekBar(
+              key: const ValueKey('seekbar'),
+              position: pos,
+              duration: dur,
+              onSeek: (d) => engine.seek(cue, d),
             ),
           ]);
         },
       ),
     );
   }
+}
+
+class _JumpButton extends StatelessWidget {
+  const _JumpButton({required this.label, required this.tooltip, required this.onPressed});
+  final String label;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(64, 40),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+          ),
+          onPressed: onPressed,
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+      );
 }
 
 /// Progress bar that seeks only on a horizontal drag; plain taps are ignored
