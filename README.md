@@ -1,17 +1,30 @@
-# audioshow
+# AudioShow
 
-A new Flutter project.
+Private GO-Button-App für Android-Tablets: Playbacks aus einem nach Künstler\*innen sortierten Cue-Ordner suchen, pro Abend zu einer Show zusammenstellen und per **GO / STOP ALL / Fade** abfahren.
 
-## Getting Started
+Design: [docs/superpowers/specs/2026-11-23-audioshow-design.md](docs/superpowers/specs/2026-11-23-audioshow-design.md)
 
-This project is a starting point for a Flutter application.
+## Ordnerstruktur auf dem Tablet
 
-A few resources to get you started if this is your first Flutter project:
+```
+Cues/
+├─ Anna Beispiel/        ← ein Ordner pro Künstler*in
+│   ├─ Jonglage.mp3
+│   └─ cues.json         ← Startzeit, Lautstärke, Notiz … pro Datei
+└─ _Shows/               ← gespeicherte Abende (2026-11-23.json …)
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Neue Dateien entweder per **Importieren** in der App (Datei wählen → Künstler\*in wählen/neu) oder per Dateimanager in den passenden Ordner kopieren und **Ordner neu einlesen**.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Bedienung
+
+- **Start:** „Zugriff auf alle Dateien“ erlauben, in den Einstellungen den Cue-Ordner wählen (Vorschlag `/storage/emulated/0/Cues`).
+- **Neue Show:** legt die Show für heute an. Links Archiv mit Suche, rechts die Show (Reihenfolge per Griff ziehen). Antippen eines Eintrags → Cue-Einstellungen (werden in `cues.json` gespeichert und gelten künftig überall).
+- **Show starten:** GO startet den markierten nächsten Cue. Cue antippen = als nächsten markieren. Laufende Playbacks oben mit Suchleiste (ziehen zum Springen) und „Von Anfang“ (zweimal = auf 0:00).
+- **GO-Verhalten** (Einstellungen): laufende Playbacks ausblenden (Standard 1 s), stoppen oder weiterlaufen lassen; pro Cue abweichend einstellbar („Bei nächstem GO“).
+
+## Entwicklung
+
+- Flutter-SDK: `D:\dev\flutter` (im Benutzer-PATH), Caches: `GRADLE_USER_HOME=D:\dev\gradle`, `PUB_CACHE=D:\dev\pub-cache`.
+- Tests: `flutter test`
+- Installieren aufs Tablet (USB-Debugging an): `flutter build apk --release` und `flutter install --release`
