@@ -98,6 +98,8 @@ class ShowStore {
         show = await load(name);
       } on FormatException {
         continue;
+      } on FileSystemException {
+        continue;
       }
       for (final e in show.entries) {
         final prev = result[e];

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -47,13 +48,30 @@ class AppState extends ChangeNotifier {
   ShowStore? get showStore => settings.cueRoot == null ? null : ShowStore(Directory(settings.cueRoot!));
 
   Future<void> init() async {
-    settings = _initialSettings ?? await _settingsStore.load();
+    try {
+      settings = _initialSettings ?? await _settingsStore.load();
+    } catch (_) {
+      settings = const AppSettings();
+    }
     await rescan();
     ready = true;
     notifyListeners();
   }
 
+  /// Never throws: any failure ends up in [library.error].
   Future<void> rescan() async {
+    try {
+      await _rescan();
+    } catch (e) {
+      library = Library.empty('Fehler beim Einlesen des Cue-Ordners: $e');
+      showNames = const [];
+      lastUsed = const {};
+      _cueSettings.clear();
+      notifyListeners();
+    }
+  }
+
+  Future<void> _rescan() async {
     hasPermission = await _checkPermission();
     final root = settings.cueRoot;
     if (root == null) {
@@ -128,6 +146,52 @@ class AppState extends ChangeNotifier {
   Future<void> deleteShow(String name) async {
     await showStore!.delete(name);
     await rescan();
+  }
+
+  AudioVoice? _preview;
+  AudioFileRef? previewRef;
+  StreamSubscription<void>? _previewDone;
+
+  /// Starts (or, for the same file, stops) listening to a file outside the show.
+  Future<void> togglePreview(AudioFileRef ref) async {
+    final same = ref == previewRef;
+    stopPreview();
+    if (same) return;
+    previewRef = ref;
+    notifyListeners();
+    final s = settingsOf(ref);
+    final AudioVoice v;
+    try {
+      v = await backend.load(library.fileFor(ref).path, initialPosition: s.startAt);
+    } catch (_) {
+      if (previewRef == ref) {
+        previewRef = null;
+        notifyListeners();
+      }
+      rethrow;
+    }
+    if (previewRef != ref) {
+      unawaited(v.dispose());
+      return;
+    }
+    _preview = v;
+    await v.setVolume(s.volume / 100);
+    await v.play();
+    _previewDone = v.completed.listen((_) {
+      if (previewRef == ref) stopPreview();
+    });
+  }
+
+  void stopPreview() {
+    final v = _preview;
+    _previewDone?.cancel();
+    _previewDone = null;
+    _preview = null;
+    if (previewRef != null) {
+      previewRef = null;
+      notifyListeners();
+    }
+    if (v != null) unawaited(v.stop().whenComplete(v.dispose));
   }
 
   Future<Map<String, CueSettings>> settingsForArtist(String artist) =>

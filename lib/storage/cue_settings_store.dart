@@ -35,6 +35,9 @@ class CueSettingsStore {
       };
     } on FormatException {
       return {};
+    } on FileSystemException {
+      // e.g. not UTF-8 (edited with an old Windows editor) or unreadable
+      return {};
     }
   }
 
@@ -44,7 +47,8 @@ class CueSettingsStore {
       Map<String, dynamic> raw;
       try {
         raw = await _readRaw(f) ?? {};
-      } on FormatException {
+      } on Exception {
+        // FormatException (bad JSON) or FileSystemException (not UTF-8)
         final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
         await f.rename('${f.path}.corrupt-$stamp');
         raw = {};

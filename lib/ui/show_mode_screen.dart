@@ -36,6 +36,7 @@ class _ShowModeScreenState extends State<ShowModeScreen> {
   @override
   void initState() {
     super.initState();
+    _state.stopPreview(); // an editor preview must never play under the show
     _engine.addListener(_onEngine);
     _load();
     if (widget.keepAwake) unawaited(ShowKeepAlive.enter(widget.showName));

@@ -86,4 +86,12 @@ void main() {
     expect(used['B/b.mp3'], DateTime(2026, 11, 1));
     expect(used.containsKey('C/c.mp3'), isFalse);
   });
+
+  test('lastUsed skips unreadable (non-UTF-8) show files', () async {
+    final a = await store.createForDate(DateTime(2026, 11, 1));
+    await store.save(a.copyWith(entries: ['A/a.mp3']));
+    File('${root.path}/_Shows/2026-11-02.json').writeAsBytesSync([0x7b, 0xfc, 0x7d]);
+    final used = await store.lastUsed();
+    expect(used['A/a.mp3'], DateTime(2026, 11, 1));
+  });
 }

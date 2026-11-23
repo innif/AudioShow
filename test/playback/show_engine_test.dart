@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audioshow/model/cue_settings.dart';
 import 'package:audioshow/playback/show_engine.dart';
 import 'package:audioshow/storage/app_settings.dart';
@@ -285,5 +287,59 @@ void main() {
         a.flushMicrotasks();
         expect(backend.voiceFor('/root/X/a.mp3').disposed, isTrue);
         expect(backend.loadedPaths.last, '/root/X/b.mp3');
+      }));
+
+  test('stopAll cancels a cue that is still loading', () => run((a) {
+        setup([]);
+        backend.gate = Completer<void>();
+        engine.setCues([cue('a.mp3'), cue('b.mp3')]);
+        engine.go();
+        a.flushMicrotasks();
+        engine.stopAll();
+        backend.gate!.complete();
+        a.flushMicrotasks();
+        final v = backend.voiceFor('/root/X/a.mp3');
+        expect(v.played, isFalse);
+        expect(v.disposed, isTrue);
+        expect(engine.running, isEmpty);
+      }));
+
+  test('fadeAll cancels a cue that is still loading', () => run((a) {
+        setup([]);
+        backend.gate = Completer<void>();
+        engine.setCues([cue('a.mp3')]);
+        engine.go();
+        a.flushMicrotasks();
+        engine.fadeAll(const Duration(seconds: 1));
+        backend.gate!.complete();
+        a.flushMicrotasks();
+        expect(backend.voiceFor('/root/X/a.mp3').played, isFalse);
+        expect(engine.running, isEmpty);
+      }));
+
+  test('next GO applies GO behavior to a cue that is still loading', () => run((a) {
+        setup([]);
+        backend.gate = Completer<void>();
+        engine.setCues([cue('a.mp3'), cue('b.mp3')]);
+        engine.go();
+        a.flushMicrotasks();
+        a.elapse(ShowEngine.goLockout);
+        engine.go();
+        backend.gate!.complete();
+        a.flushMicrotasks();
+        expect(backend.voiceFor('/root/X/a.mp3').played, isFalse);
+        expect(backend.voiceFor('/root/X/b.mp3').played, isTrue);
+        expect(engine.running.map((r) => r.showIndex), [1]);
+      }));
+
+  test('endAt at or before startAt is ignored', () => run((a) {
+        setup([cue('a.mp3', settings: const CueSettings(startAt: Duration(seconds: 20), endAt: Duration(seconds: 10)))]);
+        a.flushMicrotasks();
+        goAndSettle(a);
+        final v = backend.voiceFor('/root/X/a.mp3');
+        v.emitPosition(const Duration(seconds: 20));
+        a.flushMicrotasks();
+        expect(v.stopped, isFalse);
+        expect(engine.running, hasLength(1));
       }));
 }

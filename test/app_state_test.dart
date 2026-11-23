@@ -3,6 +3,10 @@ import 'dart:io';
 import 'package:audioshow/library/library.dart';
 import 'package:audioshow/model/cue_settings.dart';
 import 'package:audioshow/model/show.dart';
+import 'package:audioshow/app_state.dart';
+import 'package:audioshow/storage/app_settings.dart';
+
+import 'fakes/fake_audio_backend.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
@@ -33,5 +37,29 @@ void main() {
     final state = await makeState(tester, root: root.path);
     final show = (await tester.runAsync(state.createShowToday))!;
     expect(state.showNames, [show.name]);
+  });
+
+  testWidgets('init always becomes ready and reports scan errors', (tester) async {
+    final state = AppState(
+      backend: FakeAudioBackend(),
+      checkPermission: () async => throw const FileSystemException('kaputt'),
+      initialSettings: const AppSettings(cueRoot: '/x'),
+    );
+    await tester.runAsync(state.init);
+    expect(state.ready, isTrue);
+    expect(state.library.error, contains('kaputt'));
+  });
+
+  testWidgets('opening show mode stops a running preview', (tester) async {
+    final root = makeCueRoot(['Anna/a.mp3']);
+    addTearDown(() => root.deleteSync(recursive: true));
+    final state = await makeState(tester, root: root.path);
+    await tester.runAsync(() => state.togglePreview(const AudioFileRef('Anna', 'a.mp3')));
+    final v = (state.backend as FakeAudioBackend).voices.single;
+    expect(v.played, isTrue);
+    state.stopPreview();
+    await tester.pump();
+    expect(v.stopped, isTrue);
+    expect(state.previewRef, isNull);
   });
 }

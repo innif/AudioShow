@@ -131,4 +131,28 @@ void main() {
     final save = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Speichern'));
     expect(save.onPressed, isNull);
   });
+
+  testWidgets('cue settings dialog rejects end before start', (tester) async {
+    final state = await makeState(tester);
+    await pumpApp(
+      tester,
+      state,
+      Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => showCueSettingsDialog(context, const AudioFileRef('A', 'a.mp3'), const CueSettings()),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('startAt')), '0:30');
+    await tester.enterText(find.byKey(const Key('endAt')), '0:20');
+    await tester.pump();
+    expect(find.text('Ende muss nach dem Start liegen'), findsOneWidget);
+    final save = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Speichern'));
+    expect(save.onPressed, isNull);
+  });
 }

@@ -160,6 +160,7 @@ class _ShowEditorScreenState extends State<ShowEditorScreen> {
               label: const Text('Show starten'),
               onPressed: hasPlayable
                   ? () async {
+                      _state.stopPreview();
                       await Navigator.of(context).pushNamed(showModeRoute, arguments: widget.showName);
                       _refresh();
                     }

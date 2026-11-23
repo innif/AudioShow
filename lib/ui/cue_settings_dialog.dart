@@ -41,15 +41,20 @@ class _CueSettingsDialogState extends State<_CueSettingsDialog> {
     return (value: d, ok: d != null);
   }
 
-  bool get _valid => [_startAt, _endAt, _fadeIn, _goFade].every((c) => _parse(c).ok);
+  bool get _endBeforeStart {
+    final end = _parse(_endAt).value;
+    return end != null && end <= (_parse(_startAt).value ?? Duration.zero);
+  }
 
-  Widget _timeField(String label, TextEditingController c, String key, {String hint = 'm:ss'}) {
+  bool get _valid => [_startAt, _endAt, _fadeIn, _goFade].every((c) => _parse(c).ok) && !_endBeforeStart;
+
+  Widget _timeField(String label, TextEditingController c, String key, {String hint = 'm:ss', String? extraError}) {
     final ok = _parse(c).ok;
     return TextField(
       key: Key(key),
       controller: c,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      decoration: InputDecoration(labelText: label, hintText: hint, errorText: ok ? null : 'Ungültige Zeit'),
+      decoration: InputDecoration(labelText: label, hintText: hint, errorText: ok ? extraError : 'Ungültige Zeit'),
       onChanged: (_) => setState(() {}),
     );
   }
@@ -81,7 +86,8 @@ class _CueSettingsDialogState extends State<_CueSettingsDialog> {
             Row(children: [
               Expanded(child: _timeField('Start bei', _startAt, 'startAt', hint: '0:00')),
               const SizedBox(width: 16),
-              Expanded(child: _timeField('Ende bei (optional)', _endAt, 'endAt', hint: 'bis Dateiende')),
+              Expanded(child: _timeField('Ende bei (optional)', _endAt, 'endAt',
+                  hint: 'bis Dateiende', extraError: _endBeforeStart ? 'Ende muss nach dem Start liegen' : null)),
             ]),
             const SizedBox(height: 16),
             Text('Lautstärke: ${_volume.round()} %'),

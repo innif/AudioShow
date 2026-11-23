@@ -80,4 +80,13 @@ void main() {
     final loaded = await store.load(dir);
     expect(loaded.keys.toSet(), {'a.mp3', 'b.mp3', 'c.mp3'});
   });
+
+  test('non-UTF-8 cues.json: load returns empty, save backs it up', () async {
+    await cuesFile().writeAsBytes([0x7b, 0x22, 0x6e, 0x6f, 0x74, 0x65, 0x22, 0x3a, 0x22, 0xfc, 0x22, 0x7d]); // {"note":"ü"}
+    expect(await store.load(dir), isEmpty);
+    await store.save(dir, 'a.mp3', const CueSettings(volume: 50));
+    final backups = dir.listSync().where((f) => f.uri.pathSegments.last.startsWith('cues.json.corrupt-'));
+    expect(backups, hasLength(1));
+    expect((await store.load(dir))['a.mp3']!.volume, 50);
+  });
 }

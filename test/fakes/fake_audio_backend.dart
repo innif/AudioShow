@@ -56,8 +56,12 @@ class FakeAudioBackend implements AudioBackend {
 
   final Map<String, Duration> initialPositions = {};
 
+  /// When set, loads wait until it completes (simulates slow file preparation).
+  Completer<void>? gate;
+
   @override
   Future<AudioVoice> load(String path, {Duration initialPosition = Duration.zero}) async {
+    if (gate != null) await gate!.future;
     final v = FakeVoice(path, initialPosition);
     initialPositions[path] = initialPosition;
     voices.add(v);

@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import '../app_state.dart';
 import '../library/library.dart';
 import '../library/search.dart';
-import '../playback/audio_backend.dart';
 import 'cue_settings_dialog.dart';
 import 'format.dart';
 
@@ -27,50 +26,20 @@ class LibraryPane extends StatefulWidget {
 class _LibraryPaneState extends State<LibraryPane> {
   final _query = TextEditingController();
   _Sort _sort = _Sort.alpha;
-  AudioVoice? _preview;
-  AudioFileRef? _previewRef;
-
-  @override
-  void dispose() {
-    _stopPreview();
-    _query.dispose();
-    super.dispose();
-  }
-
-  void _stopPreview() {
-    final v = _preview;
-    _preview = null;
-    _previewRef = null;
-    if (v != null) unawaited(v.stop().whenComplete(v.dispose));
-  }
-
   Future<void> _togglePreview(AppState state, AudioFileRef ref) async {
-    final same = ref == _previewRef;
-    _stopPreview();
-    if (same) {
-      setState(() {});
-      return;
-    }
-    setState(() => _previewRef = ref);
     try {
-      final v = await state.backend.load(state.library.fileFor(ref).path,
-          initialPosition: state.settingsOf(ref).startAt);
-      if (!mounted || _previewRef != ref) {
-        unawaited(v.dispose());
-        return;
-      }
-      _preview = v;
-      await v.setVolume(state.settingsOf(ref).volume / 100);
-      await v.play();
-      v.completed.first.then((_) {
-        if (mounted && _previewRef == ref) setState(_stopPreview);
-      });
+      await state.togglePreview(ref);
     } catch (e) {
       if (mounted) {
-        setState(() => _previewRef = null);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Vorhören fehlgeschlagen: $e')));
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
   }
 
   Future<void> _editSettings(AppState state, AudioFileRef ref) async {
@@ -154,7 +123,7 @@ class _LibraryPaneState extends State<LibraryPane> {
       if (s.volume != 100) '${s.volume} %',
       if (s.note.isNotEmpty) s.note,
     ].join(' · ');
-    final playing = ref == _previewRef;
+    final playing = ref == state.previewRef;
     return ListTile(
       title: Text(ref.fileName),
       subtitle: details.isEmpty ? null : Text(details),

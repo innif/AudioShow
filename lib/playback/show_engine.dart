@@ -38,6 +38,13 @@ class RunningCue {
   bool get fadingOut => _fadingOut;
 }
 
+/// A GO whose file is still loading; can be cancelled before it sounds.
+class _PendingStart {
+  _PendingStart(this.cue);
+  final ResolvedCue cue;
+  bool cancelled = false;
+}
+
 class ShowEngine extends ChangeNotifier {
   ShowEngine({required this.backend, required this.settings});
 
@@ -51,6 +58,7 @@ class ShowEngine extends ChangeNotifier {
   List<ResolvedCue> _cues = const [];
   int? _next;
   final List<RunningCue> _running = [];
+  final List<_PendingStart> _pending = [];
   final Set<int> _played = {};
   int _nextId = 1;
   bool _locked = false;
@@ -96,6 +104,10 @@ class ShowEngine extends ChangeNotifier {
           _fadeOut(r, r.cue.settings.goFade ?? settings.goFade);
       }
     }
+    // A previous cue that has not started yet: never let it sound late.
+    for (final p in _pending) {
+      if ((p.cue.settings.goBehavior ?? settings.goBehavior) != GoBehavior.keepRunning) p.cancelled = true;
+    }
 
     final cue = _cues[index];
     final voiceFuture = _takePreload(index) ?? backend.load(cue.absPath, initialPosition: cue.settings.startAt);
@@ -104,21 +116,27 @@ class ShowEngine extends ChangeNotifier {
     lastError = null;
     notifyListeners();
 
+    final pending = _PendingStart(cue);
+    _pending.add(pending);
     final AudioVoice voice;
     try {
       voice = await voiceFuture;
     } catch (e) {
+      _pending.remove(pending);
+      if (_disposed) return;
       lastError = 'Konnte ${cue.relPath} nicht laden: $e';
       notifyListeners();
       return;
     }
-    if (_disposed) {
+    _pending.remove(pending);
+    if (_disposed || pending.cancelled) {
       unawaited(voice.dispose());
       return;
     }
     final r = RunningCue._(_nextId++, index, cue, voice);
     _running.add(r);
-    final endAt = cue.settings.endAt;
+    // An end at or before the start would stop the cue instantly; ignore it.
+    final endAt = cue.settings.endAt != null && cue.settings.endAt! > cue.settings.startAt ? cue.settings.endAt : null;
     r._subs.add(voice.positionStream.listen((pos) {
       if (endAt != null && pos >= endAt) _stop(r);
     }));
@@ -131,13 +149,21 @@ class ShowEngine extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _cancelPending() {
+    for (final p in _pending) {
+      p.cancelled = true;
+    }
+  }
+
   void stopAll() {
+    _cancelPending();
     for (final r in List.of(_running)) {
       _stop(r);
     }
   }
 
   void fadeAll(Duration d) {
+    _cancelPending();
     for (final r in List.of(_running)) {
       _fadeOut(r, d);
     }
